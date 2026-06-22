@@ -1,0 +1,22 @@
+{
+  "name": "meilisearch-sync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sync a Meilisearch index from a BigQuery table",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "sync": "node src/index.js",
+    "sync:watch": "node src/index.js --interval 10",
+    "test:search": "node src/test-search.js",
+    "web": "node src/web/server.js"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "^8.1.1",
+    "dotenv": "^17.2.1",
+    "meilisearch": "^0.50.0"
+  }
+}
