@@ -57,6 +57,28 @@ SKIP_SETTINGS=true npm run test:search   # no re-aplica settings
 VERBOSE=true npm run test:search         # muestra las 300 en detalle
 ```
 
+### Interfaz web de búsqueda
+
+```bash
+npm run settings   # una vez: aplica filterable (marca, categoría) sin reindexar
+npm run web        # http://localhost:3000
+```
+
+- Pestaña **Bidcom**: todo el catálogo (sin filtro de marca).
+- Pestaña **Gadnic**: solo `marca = "Gadnic"`.
+- **Categorías**: chips con conteo (facets) en la misma request que los productos.
+- Orden: `sort: ['orden_web:asc']` en cada búsqueda.
+
+### Deploy web en Vercel
+
+Solo la UI + API (`public/` + `api/`). No corre el sync.
+
+1. Importar repo en Vercel (Framework: Other, sin build).
+2. Env vars: `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY`, `MEILISEARCH_INDEX`, opcional `MEILISEARCH_SORT_FIELD`.
+3. Push a `main` → redeploy automático.
+
+Documentación completa: [`docs/DOCUMENTACION.md`](docs/DOCUMENTACION.md).
+
 ## Variables de entorno
 
 | Variable | Requerida | Default | Descripción |
@@ -73,6 +95,7 @@ VERBOSE=true npm run test:search         # muestra las 300 en detalle
 | `MEILISEARCH_SORT_FIELD` | No | `orden_web` | Campo de prioridad web |
 | `MEILISEARCH_SEARCHABLE_ATTRIBUTES` | No | ver `config.js` | Lista separada por comas |
 | `MEILISEARCH_DISPLAYED_ATTRIBUTES` | No | ver `config.js` | Orden de campos en resultados |
+| `MEILISEARCH_FILTERABLE_ATTRIBUTES` | No | `marca,categoria_principal_name` | Filtros y facets en la web |
 | `SYNC_BATCH_SIZE` | No | `1000` | Documentos por lote |
 | `SYNC_DELETE_STALE` | No | `true` | Borra docs que ya no están en BQ |
 
@@ -86,7 +109,7 @@ ORDER BY orden_web ASC
 
 ## Configuración del índice
 
-En cada sync se aplican estos settings (no borran el embedder de OpenAI si está configurado en la UI).
+En cada sync se aplican searchable, displayed, filterable, ranking, sort y sinónimos. **No** incluye embedder ni búsqueda semántica.
 
 ### Searchable attributes
 
@@ -103,15 +126,17 @@ Campos y orden en la vista previa / respuesta de búsqueda:
 ### Ranking rules
 
 ```
-words → typo → proximity → attributeRank → wordPosition → exactness → orden_web:asc → sort
+words → typo → proximity → attributeRank → wordPosition → sort → exactness → es_accesorio:asc
 ```
 
-- Primero gana la **relevancia textual** (título exacto, posición de palabras).
-- Después desempata **`orden_web`** (1 = más prioridad en la web, 9999 = sin prioridad).
+- Primero gana la **relevancia textual**.
+- La regla **`sort`** (con `sort: ['orden_web:asc']` en cada query) ordena por prioridad web.
+- `es_accesorio:asc` deja accesorios debajo de productos principales.
 
-### Sortable
+### Sortable y filterable
 
-- `orden_web` — para ordenar explícitamente: `sort: ['orden_web:asc']`
+- **Sortable:** `orden_web`, `es_accesorio`
+- **Filterable:** `marca`, `categoria_principal_name` (pestañas Gadnic y chips de categoría)
 
 ## Normalización de documentos
 
@@ -125,11 +150,13 @@ Durante el sync cada fila se transforma antes de subirse:
 | Fechas | ISO string |
 | NUMERIC de BQ | String entero |
 
-## Embedder (búsqueda semántica)
+## Búsqueda semántica (embedder) — no activa
 
-El sync **no modifica ni borra** la configuración del embedder. Solo actualiza searchable, displayed, ranking y sort.
+Hoy el índice funciona solo con **búsqueda por texto**. No hay embedder ni `hybrid` en la web.
 
-Template recomendado para OpenAI en Meilisearch Cloud:
+Para el catálogo Bidcom (queries cortas, marcas, categorías, `orden_web`) **no es relevante por ahora**. Podría evaluarse más adelante si se priorizan búsquedas en lenguaje natural; implicaría configurar el embedder en Meilisearch Cloud, usar `hybrid` en el frontend y asumir costo/latencia de indexación.
+
+El sync **no** configura embedder. Referencia de template si algún día se activa:
 
 ```
 Producto: {{ doc.post_title }}. SKU: {{ doc.codigo_aguila }}. Marca: {{ doc.marca }}. Categoría: {{ doc.categoria_principal_name }}. Línea: {{ doc.linea }}. EAN: {{ doc.ean }}. Descripción: {{ doc.descripcion_producto | truncatewords: 40 }}
@@ -138,15 +165,21 @@ Producto: {{ doc.post_title }}. SKU: {{ doc.codigo_aguila }}. Marca: {{ doc.marc
 ## Estructura del proyecto
 
 ```
+api/                   # Serverless Vercel (search, health)
+public/                # UI del buscador
 src/
-├── index.js           # Entry point del sync
+├── index.js           # Entry point del sync + scheduler
+├── apply-settings.js  # npm run settings
 ├── config.js          # Env vars y defaults del índice
-├── bigquery.js        # Lectura desde BigQuery
-├── meilisearch.js     # Cliente, settings, upsert, delete stale
-├── sync.js            # Orquestación y normalización
-├── manual-queries.js  # 100 búsquedas manuales de prueba
-├── test-queries.js    # Generador de 200 búsquedas desde catálogo
-└── test-search.js     # Runner de tests de relevancia
+├── bigquery.js
+├── meilisearch.js
+├── sync.js
+├── manual-queries.js
+├── test-queries.js
+├── test-search.js
+└── web/               # Lógica compartida local + Vercel
+docs/
+└── DOCUMENTACION.md
 ```
 
 ## Flujo de sincronización
@@ -182,7 +215,11 @@ Meilisearch muestra `imagen_calada`. El sync la completa desde `fields` si viene
 
 ### Accesorios arriba del producto real
 
-Verificá el orden de ranking rules. `orden_web:asc` debe ir **después** de `wordPosition` y `exactness`. Corré `npm run test:search` para validar.
+Verificá `es_accesorio:asc` en ranking rules y que la búsqueda use `sort: ['orden_web:asc']`. Corré `npm run test:search`.
+
+### Filtros / categorías no funcionan en la web
+
+Corré `npm run settings` (o `npm run sync`) para aplicar `filterableAttributes: ['marca', 'categoria_principal_name']`.
 
 ### `displayedAttributes` tarda mucho
 

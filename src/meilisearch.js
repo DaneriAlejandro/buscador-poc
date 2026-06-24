@@ -34,6 +34,10 @@ export async function ensureIndex(client, config) {
     settings.sortableAttributes = [config.sortField, 'es_accesorio'];
   }
 
+  if (config.filterableAttributes?.length) {
+    settings.filterableAttributes = config.filterableAttributes;
+  }
+
   if (config.rankingRules?.length) {
     settings.rankingRules = config.rankingRules;
   }
@@ -49,6 +53,7 @@ export async function ensureIndex(client, config) {
       searchableAttributes: settings.searchableAttributes?.length,
       displayedAttributes: settings.displayedAttributes?.slice(0, 5).concat('...'),
       sortableAttributes: settings.sortableAttributes,
+      filterableAttributes: settings.filterableAttributes,
       rankingRules: settings.rankingRules,
     });
   }

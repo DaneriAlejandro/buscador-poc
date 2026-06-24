@@ -4,8 +4,30 @@ const resultsEl = document.getElementById('results');
 const statusEl = document.getElementById('status');
 const metaEl = document.getElementById('meta');
 const showScoresEl = document.getElementById('show-scores');
+const categoriesSection = document.getElementById('categories');
+const categoryListEl = document.getElementById('category-list');
+const tabs = document.querySelectorAll('.tab');
 
 let debounceTimer;
+let scope = 'bidcom';
+let selectedCategory = null;
+
+function setScope(nextScope) {
+  scope = nextScope;
+  selectedCategory = null;
+  for (const tab of tabs) {
+    const active = tab.dataset.scope === scope;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  }
+}
+
+for (const tab of tabs) {
+  tab.addEventListener('click', () => {
+    setScope(tab.dataset.scope);
+    search(input.value.trim());
+  });
+}
 
 function formatPrice(value) {
   if (value == null || value === '') {
@@ -79,8 +101,34 @@ function renderHit(hit, index) {
   `;
 }
 
+function renderCategories(categories) {
+  categoryListEl.innerHTML = '';
+
+  if (!categories?.length) {
+    categoriesSection.hidden = true;
+    return;
+  }
+
+  categoriesSection.hidden = false;
+
+  for (const { name, count } of categories) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `category-chip${selectedCategory === name ? ' active' : ''}`;
+    button.innerHTML = `${escapeHtml(name)} <span class="category-count">${count}</span>`;
+    button.addEventListener('click', () => {
+      selectedCategory = selectedCategory === name ? null : name;
+      search(input.value.trim());
+    });
+    categoryListEl.appendChild(button);
+  }
+}
+
 async function search(query) {
-  const params = new URLSearchParams({ q: query, limit: '20' });
+  const params = new URLSearchParams({ q: query, limit: '20', scope });
+  if (selectedCategory) {
+    params.set('category', selectedCategory);
+  }
   if (showScoresEl.checked) {
     params.set('scores', '1');
   }
@@ -92,6 +140,7 @@ async function search(query) {
   const data = await response.json();
 
   if (!response.ok) {
+    categoriesSection.hidden = true;
     statusEl.textContent = `Error: ${data.error ?? response.statusText}`;
     return;
   }
@@ -100,16 +149,21 @@ async function search(query) {
   metaEl.textContent = `${total.toLocaleString('es-AR')} resultados · ${data.processingTimeMs} ms`;
 
   if (!query) {
+    categoriesSection.hidden = true;
     statusEl.textContent = 'Escribí algo para buscar.';
     return;
   }
 
+  renderCategories(data.categories);
+
   if (data.hits.length === 0) {
-    statusEl.textContent = 'Sin resultados.';
+    statusEl.textContent = selectedCategory
+      ? 'Sin productos en esa categoría.'
+      : 'Sin resultados.';
     return;
   }
 
-  statusEl.textContent = '';
+  statusEl.textContent = selectedCategory ? `Filtrando: ${selectedCategory}` : '';
   resultsEl.innerHTML = data.hits.map(renderHit).join('');
 }
 
@@ -122,6 +176,7 @@ input.addEventListener('input', () => {
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     if (input.value.trim().length >= 2 || input.value.trim() === '') {
+      selectedCategory = null;
       search(input.value.trim());
     }
   }, 300);

@@ -13,6 +13,8 @@ function assertSqlIdentifier(name, label) {
   return name;
 }
 
+export const GADNIC_MARCA = 'Gadnic';
+
 export function loadWebConfig() {
   const sortField = assertSqlIdentifier(
     process.env.MEILISEARCH_SORT_FIELD?.trim() || 'orden_web',
@@ -25,4 +27,50 @@ export function loadWebConfig() {
     indexName: required('MEILISEARCH_INDEX'),
     sortField,
   };
+}
+
+export const CATEGORY_FACET = 'categoria_principal_name';
+
+export function buildScopeFilter(scope) {
+  if (scope === 'bidcom' || scope === 'all' || !scope) {
+    return undefined;
+  }
+
+  if (scope === 'gadnic') {
+    return `marca = "${GADNIC_MARCA}"`;
+  }
+
+  return undefined;
+}
+
+export function buildSearchFilter({ scope, category }) {
+  const parts = [];
+
+  const scopeFilter = buildScopeFilter(scope);
+  if (scopeFilter) {
+    parts.push(scopeFilter);
+  }
+
+  if (category) {
+    const safeCategory = category.replace(/"/g, '\\"');
+    parts.push(`${CATEGORY_FACET} = "${safeCategory}"`);
+  }
+
+  if (parts.length === 0) {
+    return undefined;
+  }
+
+  return parts.join(' AND ');
+}
+
+export function parseFacetCategories(facetDistribution, limit = 12) {
+  const buckets = facetDistribution?.[CATEGORY_FACET];
+  if (!buckets) {
+    return [];
+  }
+
+  return Object.entries(buckets)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, limit)
+    .map(([name, count]) => ({ name, count }));
 }

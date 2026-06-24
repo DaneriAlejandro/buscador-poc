@@ -12,6 +12,15 @@
         <h1>Buscador Meilisearch</h1>
       </header>
 
+      <div class="tabs" role="tablist" aria-label="Catálogo">
+        <button type="button" class="tab active" role="tab" data-scope="bidcom" aria-selected="true">
+          Bidcom
+        </button>
+        <button type="button" class="tab" role="tab" data-scope="gadnic" aria-selected="false">
+          Gadnic
+        </button>
+      </div>
+
       <form id="search-form" class="search-bar" role="search">
         <input
           id="query"
@@ -33,6 +42,10 @@
       </div>
 
       <div id="status" class="status" aria-live="polite"></div>
+      <section id="categories" class="categories" hidden>
+        <h2 class="categories-title">Categorías</h2>
+        <div id="category-list" class="category-list"></div>
+      </section>
       <ul id="results" class="results"></ul>
     </main>
     <script src="/app.js" type="module"></script>

@@ -1,5 +1,10 @@
 import { MeiliSearch } from 'meilisearch';
-import { loadWebConfig } from './config.js';
+import {
+  CATEGORY_FACET,
+  buildSearchFilter,
+  loadWebConfig,
+  parseFacetCategories,
+} from './config.js';
 
 let cachedIndex;
 
@@ -20,24 +25,41 @@ export async function searchProducts(params) {
   const limit = Math.min(Number(params.limit) || 20, 50);
   const offset = Math.max(Number(params.offset) || 0, 0);
   const showScores = params.scores === '1' || params.scores === true;
+  const scope = params.scope?.trim() || 'bidcom';
+  const category = params.category?.trim() || '';
 
   const { index, config } = getIndex();
   const sort = [`${config.sortField}:asc`];
+  const filter = buildSearchFilter({
+    scope,
+    category,
+  });
 
-  const response = await index.search(q, {
+  const searchParams = {
     limit,
     offset,
     sort,
     showRankingScore: showScores,
-  });
+    facets: [CATEGORY_FACET],
+  };
+
+  if (filter) {
+    searchParams.filter = filter;
+  }
+
+  const response = await index.search(q, searchParams);
 
   return {
     query: q,
+    scope,
+    category: category || null,
+    filter: filter ?? null,
     limit,
     offset,
     sort,
     processingTimeMs: response.processingTimeMs,
     estimatedTotalHits: response.estimatedTotalHits ?? response.hits.length,
+    categories: parseFacetCategories(response.facetDistribution),
     hits: response.hits,
   };
 }

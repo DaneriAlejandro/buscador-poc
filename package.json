@@ -12,6 +12,7 @@
     "sync": "node src/index.js",
     "sync:watch": "node src/index.js --interval 10",
     "test:search": "node src/test-search.js",
+    "settings": "node src/apply-settings.js",
     "web": "node src/web/server.js"
   },
   "dependencies": {

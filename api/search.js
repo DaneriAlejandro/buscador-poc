@@ -12,6 +12,8 @@ export default async function handler(req, res) {
       limit: req.query.limit,
       offset: req.query.offset,
       scores: req.query.scores,
+      scope: req.query.scope,
+      category: req.query.category,
     });
     return res.status(200).json(result);
   } catch (error) {

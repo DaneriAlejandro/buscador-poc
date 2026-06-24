@@ -46,6 +46,8 @@ const DEFAULT_DISPLAYED_ATTRIBUTES = [
   'es_accesorio',
 ];
 
+const DEFAULT_FILTERABLE_ATTRIBUTES = ['marca', 'categoria_principal_name'];
+
 function required(name) {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -88,6 +90,18 @@ function parseDisplayedAttributes() {
   const raw = process.env.MEILISEARCH_DISPLAYED_ATTRIBUTES?.trim();
   if (!raw) {
     return DEFAULT_DISPLAYED_ATTRIBUTES;
+  }
+
+  return raw
+    .split(',')
+    .map((field) => field.trim())
+    .filter(Boolean);
+}
+
+function parseFilterableAttributes() {
+  const raw = process.env.MEILISEARCH_FILTERABLE_ATTRIBUTES?.trim();
+  if (!raw) {
+    return DEFAULT_FILTERABLE_ATTRIBUTES;
   }
 
   return raw
@@ -171,6 +185,7 @@ export function loadConfig() {
       sortField,
       searchableAttributes: parseSearchableAttributes(),
       displayedAttributes: parseDisplayedAttributes(),
+      filterableAttributes: parseFilterableAttributes(),
       rankingRules: buildRankingRules(sortField),
       synonyms: DEFAULT_SYNONYMS,
     },

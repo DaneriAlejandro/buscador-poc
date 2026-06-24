@@ -48,6 +48,8 @@ const server = createServer(async (req, res) => {
         limit: url.searchParams.get('limit'),
         offset: url.searchParams.get('offset'),
         scores: url.searchParams.get('scores'),
+        scope: url.searchParams.get('scope'),
+        category: url.searchParams.get('category'),
       });
       return json(res, 200, result);
     }
