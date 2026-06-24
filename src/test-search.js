@@ -1,6 +1,7 @@
 import { MeiliSearch } from 'meilisearch';
 import { loadConfig } from './config.js';
 import { buildTestQueries, failureHint } from './test-queries.js';
+import { REF_USA_QUERIES } from './ref-usa-queries.js';
 import { ensureIndex } from './meilisearch.js';
 
 function loadClient(config) {
@@ -15,14 +16,22 @@ async function applySettings(client, config) {
   await ensureIndex(client, config.meilisearch);
 }
 
-async function runSearchTests(index, queries) {
+async function runSearchTests(index, queries, sortField) {
   const results = [];
 
   for (const { q, expect, meta, source } of queries) {
     const response = await index.search(q, {
       limit: 3,
-      sort: [`${config.meilisearch.sortField}:asc`],
-      attributesToRetrieve: ['post_title', 'categoria_principal_name', 'orden_web', 'marca', 'es_accesorio'],
+      sort: [`${sortField}:asc`],
+      attributesToRetrieve: [
+        'post_title',
+        'categoria_principal_name',
+        'orden_web',
+        'marca',
+        'codigo_aguila',
+        'es_accesorio',
+        'es_ref_usa',
+      ],
       showRankingScore: true,
     });
 
@@ -50,6 +59,73 @@ async function runSearchTests(index, queries) {
   return results;
 }
 
+function refUsaOrderingOk(hits) {
+  if (hits.length === 0) {
+    return { ok: true, reason: null };
+  }
+
+  const hasNormalSku = hits.some((hit) => hit.es_ref_usa !== 1);
+  if (hasNormalSku && hits[0].es_ref_usa === 1) {
+    return {
+      ok: false,
+      reason: 'top_is_ref_usa',
+      topSku: hits[0].codigo_aguila,
+    };
+  }
+
+  let sawRefUsa = false;
+  for (const hit of hits) {
+    if (hit.es_ref_usa === 1) {
+      sawRefUsa = true;
+    } else if (sawRefUsa) {
+      return {
+        ok: false,
+        reason: 'ref_usa_before_normal',
+        sku: hit.codigo_aguila,
+      };
+    }
+  }
+
+  return { ok: true, reason: null };
+}
+
+async function runRefUsaTests(index, sortField) {
+  const results = [];
+
+  for (const entry of REF_USA_QUERIES) {
+    const response = await index.search(entry.q, {
+      limit: 50,
+      sort: [`${sortField}:asc`],
+      attributesToRetrieve: ['post_title', 'codigo_aguila', 'es_ref_usa', 'orden_web'],
+    });
+
+    const hits = response.hits;
+    const check = refUsaOrderingOk(hits);
+    const normalCount = hits.filter((hit) => hit.es_ref_usa !== 1).length;
+    const refCount = hits.filter((hit) => hit.es_ref_usa === 1).length;
+
+    results.push({
+      query: entry.q,
+      source: 'ref_usa',
+      ok: check.ok,
+      total: response.estimatedTotalHits ?? hits.length,
+      meta: entry,
+      reason: check.reason,
+      counts: { normal: normalCount, ref: refCount },
+      top: hits[0]
+        ? {
+            title: hits[0].post_title?.slice(0, 80),
+            sku: hits[0].codigo_aguila,
+            es_ref_usa: hits[0].es_ref_usa,
+            orden_web: hits[0].orden_web,
+          }
+        : null,
+    });
+  }
+
+  return results;
+}
+
 async function main() {
   const config = loadConfig();
   const client = loadClient(config);
@@ -60,7 +136,7 @@ async function main() {
   const querySets = await buildTestQueries(config.bigQuery);
   const queries = querySets.all;
   console.log(
-    `[test] Loaded ${queries.length} queries (${querySets.manual.length} manual + ${querySets.generated.length} generated)`,
+    `[test] Loaded ${queries.length} queries (${querySets.manual.length} manual + ${querySets.generated.length} generated) + ${REF_USA_QUERIES.length} ref_usa`,
   );
 
   if (apply) {
@@ -68,21 +144,28 @@ async function main() {
     await applySettings(client, config);
   }
 
-  const results = await runSearchTests(index, queries);
-  const passed = results.filter((result) => result.ok);
-  const failed = results.filter((result) => !result.ok);
+  const results = await runSearchTests(index, queries, config.meilisearch.sortField);
+  const refUsaResults = await runRefUsaTests(index, config.meilisearch.sortField);
+  const allResults = [...results, ...refUsaResults];
+
+  const passed = allResults.filter((result) => result.ok);
+  const failed = allResults.filter((result) => !result.ok);
   const manualPassed = passed.filter((result) => result.source === 'manual').length;
   const generatedPassed = passed.filter((result) => result.source === 'generated').length;
-  const manualTotal = results.filter((result) => result.source === 'manual').length;
-  const generatedTotal = results.filter((result) => result.source === 'generated').length;
+  const refUsaPassed = passed.filter((result) => result.source === 'ref_usa').length;
+  const manualTotal = allResults.filter((result) => result.source === 'manual').length;
+  const generatedTotal = allResults.filter((result) => result.source === 'generated').length;
+  const refUsaTotal = refUsaResults.length;
 
   console.log(
-    `\n[test] ${passed.length}/${results.length} passed (${failed.length} failed)`,
+    `\n[test] ${passed.length}/${allResults.length} passed (${failed.length} failed)`,
   );
-  console.log(`[test] manual: ${manualPassed}/${manualTotal} | generated: ${generatedPassed}/${generatedTotal}\n`);
+  console.log(
+    `[test] manual: ${manualPassed}/${manualTotal} | generated: ${generatedPassed}/${generatedTotal} | ref_usa: ${refUsaPassed}/${refUsaTotal}\n`,
+  );
 
   if (verbose) {
-    for (const result of results) {
+    for (const result of allResults) {
       const status = result.ok ? 'OK' : 'FAIL';
       console.log(`[test] "${result.query}" — ${status} (${result.total} hits)`);
       if (result.top) {
@@ -92,6 +175,12 @@ async function main() {
     }
   } else {
     for (const result of passed) {
+      if (result.source === 'ref_usa') {
+        console.log(
+          `  OK  [ref_usa] "${result.query}" → ${result.top?.sku} (normal ${result.counts.normal}, ref ${result.counts.ref})`,
+        );
+        continue;
+      }
       console.log(`  OK  [${result.source}] "${result.query}" → ${result.top?.title?.slice(0, 55)}`);
     }
   }
@@ -99,6 +188,17 @@ async function main() {
   if (failed.length > 0) {
     console.log('\n[test] Failures:');
     for (const result of failed) {
+      if (result.source === 'ref_usa') {
+        console.log(
+          `  FAIL [ref_usa] "${result.query}" (${result.total} hits) [${result.reason}] — ${result.meta?.note ?? ''}`,
+        );
+        if (result.top) {
+          console.log(`    top: ${result.top.sku} es_ref_usa=${result.top.es_ref_usa} ow=${result.top.orden_web}`);
+          console.log(`    title: ${result.top.title}`);
+          console.log(`    in page: normal=${result.counts.normal} ref=${result.counts.ref}`);
+        }
+        continue;
+      }
       console.log(`  FAIL [${result.source}] "${result.query}" (${result.total} hits) [${failureHint(result)}]`);
       if (result.top) {
         console.log(`    got: ${result.top.title}`);

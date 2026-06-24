@@ -39,6 +39,15 @@ function extractImageFromFields(fieldsRaw) {
   return urls.find((url) => /1000x1000/i.test(url)) ?? urls[0];
 }
 
+function isRefUsaSku(codigoAguila) {
+  if (!codigoAguila) {
+    return false;
+  }
+
+  const normalized = String(codigoAguila).trim().toLowerCase();
+  return normalized.startsWith('ref-') || normalized.startsWith('usa-');
+}
+
 function isAccessoryTitle(title) {
   if (!title) {
     return false;
@@ -94,6 +103,7 @@ function normalizeDocument(row, primaryKey, sortField) {
   }
 
   document.es_accesorio = isAccessoryTitle(document.post_title) ? 1 : 0;
+  document.es_ref_usa = isRefUsaSku(document.codigo_aguila) ? 1 : 0;
 
   return document;
 }

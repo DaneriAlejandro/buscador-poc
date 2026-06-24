@@ -139,6 +139,10 @@ export function failureHint({ meta, top }) {
     return 'ranking';
   }
 
+  if (top.es_ref_usa === 1) {
+    return 'ref_usa';
+  }
+
   if (top.es_accesorio === 1) {
     return 'accesorio';
   }

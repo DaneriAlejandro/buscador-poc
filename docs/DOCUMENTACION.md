@@ -16,7 +16,7 @@ El repositorio tiene cuatro capacidades principales:
 | **Settings del índice** | `npm run settings` | Aplica solo configuración de Meilisearch (sin reindexar) |
 | **Interfaz web** | `npm run web` → `http://localhost:3000` | Buscador con pestañas Bidcom/Gadnic, categorías y productos |
 | **API HTTP** | `GET /api/search`, `GET /api/health` | Backend reutilizable (local o Vercel) |
-| **Tests de relevancia** | `npm run test:search` | Validar que ~300 búsquedas devuelven resultados correctos |
+| **Tests de relevancia** | `npm run test:search` | Validar que ~308 búsquedas devuelven resultados correctos |
 
 ---
 
@@ -78,7 +78,7 @@ flowchart TB
 ### 3.1 Qué hace el sync
 
 1. Lee productos publicados desde BigQuery (`post_status = 'publish'`).
-2. Normaliza cada documento (IDs, fechas, `orden_web`, imágenes, `es_accesorio`).
+2. Normaliza cada documento (IDs, fechas, `orden_web`, imágenes, `es_accesorio`, `es_ref_usa`).
 3. Configura el índice de Meilisearch (searchable, displayed, ranking, sort, sinónimos).
 4. Hace upsert por lotes.
 5. Opcionalmente elimina documentos que ya no existen en la fuente.
@@ -151,6 +151,7 @@ Retorna un resumen:
 | Fechas | ISO string (`toISOString()`) |
 | NUMERIC de BQ | String entero (`toFixed(0)`) |
 | `es_accesorio` | `1` si el título parece accesorio, `0` si no (heurística por prefijos y patrones) |
+| `es_ref_usa` | `1` si `codigo_aguila` empieza con `ref-` o `usa-`, `0` si no |
 
 #### Heurística de accesorios (`isAccessoryTitle`)
 
@@ -159,6 +160,12 @@ Marca como accesorio títulos que empiezan con: `kit`, `funda`, `soporte`, `port
 También detecta patrones como `porta notebook`, `para celular`, `instalacion de`, etc.
 
 Este campo alimenta la ranking rule `es_accesorio:asc` para que accesorios queden debajo de productos principales.
+
+#### Heurística ref/usa (`isRefUsaSku`)
+
+Marca como baja prioridad los SKU cuyo `codigo_aguila` empieza con `ref-` o `usa-` (case insensitive).
+
+Alimenta `es_ref_usa:asc` en ranking rules. Es la **primera** regla: separa ref/usa del resto antes que relevancia, `orden_web` o accesorios.
 
 #### Extracción de imagen (`extractImageFromFields`)
 
@@ -243,26 +250,28 @@ Override: `MEILISEARCH_SEARCHABLE_ATTRIBUTES` (lista separada por comas).
 
 ### 4.2 Displayed attributes
 
-`post_title`, `imagen_calada`, `precio`, `precio_tachado`, `descuento`, `marca`, `codigo_aguila`, `ean`, `subtitulo`, `descripcion_producto`, categorías, `linea`, `tags`, `orden_web`, flags (`envio_gratis`, `mas_vendido`, `recomendado`), IDs, cuotas, `post_modified`, `es_accesorio`, etc.
+`post_title`, `imagen_calada`, `precio`, `precio_tachado`, `descuento`, `marca`, `codigo_aguila`, `ean`, `subtitulo`, `descripcion_producto`, categorías, `linea`, `tags`, `orden_web`, flags (`envio_gratis`, `mas_vendido`, `recomendado`), IDs, cuotas, `post_modified`, `es_accesorio`, `es_ref_usa`, etc.
 
 Override: `MEILISEARCH_DISPLAYED_ATTRIBUTES`.
 
 ### 4.3 Ranking rules
 
 ```javascript
-['words', 'typo', 'proximity', 'attributeRank', 'wordPosition', 'sort', 'exactness', 'es_accesorio:asc']
+['es_ref_usa:asc', 'words', 'typo', 'proximity', 'attributeRank', 'wordPosition', 'sort', 'exactness', 'es_accesorio:asc']
 ```
 
-1. Primero gana la **relevancia textual** (palabras, typos, proximidad, posición en el título).
-2. La regla **`sort`** (antes de `exactness`) aplica el orden pasado en la query cuando se usa `sort: ['orden_web:asc']`.
-3. `exactness` favorece coincidencias exactas.
-4. `es_accesorio:asc` empuja accesorios **después** de productos principales.
+1. `es_ref_usa:asc` separa primero: **todo** `es_ref_usa = 0` arriba de **todo** `es_ref_usa = 1` (más fuerte que relevancia y `orden_web`).
+2. Luego gana la **relevancia textual** (palabras, typos, proximidad, posición en el título).
+3. La regla **`sort`** aplica `orden_web` cuando la query usa `sort: ['orden_web:asc']`.
+4. `exactness` favorece coincidencias exactas.
+5. `es_accesorio:asc` empuja accesorios **después** de productos principales (solo entre no ref/usa).
 
 > La prioridad comercial (`orden_web`) se aplica en **cada búsqueda** vía parámetro `sort`, no como ranking rule fija. La regla `sort` debe estar **antes de `exactness`** para que `orden_web` tenga efecto real entre resultados relevantes.
 
 ### 4.4 Sortable attributes
 
 - `orden_web` — prioridad comercial (1 = más importante, 9999 = sin prioridad).
+- `es_ref_usa` — separar SKU `ref-` / `usa-` al final.
 - `es_accesorio` — separar accesorios de productos.
 
 ### 4.5 Filterable attributes (facets y filtros)
@@ -461,18 +470,21 @@ VERBOSE=true npm run test:search
 
 Cada búsqueda usa `sort: ['orden_web:asc']`, igual que la web.
 
-### 8.2 Composición — 300 queries
+### 8.2 Composición — 308 queries
 
 | Origen | Cantidad | Fuente |
 |---|---|---|
 | Manual | 100 | `src/manual-queries.js` |
 | Generadas | 200 | BigQuery: categorías, marcas, líneas |
+| ref_usa | 8 | `src/ref-usa-queries.js` |
 
 ### 8.3 Criterio de éxito
 
-El **primer resultado** debe coincidir con el patrón esperado (y categoría/marca según el modo).
+**Manual y generadas:** el **primer resultado** debe coincidir con el patrón esperado (y categoría/marca según el modo).
 
-Hints de fallo: `ranking`, `accesorio`, `catalogo`.
+**ref_usa:** si en la primera página hay SKU con `es_ref_usa = 0`, el #1 no puede ser `es_ref_usa = 1`, y ningún ref/usa puede aparecer antes que un normal en el ranking.
+
+Hints de fallo: `ranking`, `ref_usa`, `accesorio`, `catalogo`.
 
 ---
 
@@ -520,6 +532,7 @@ meilisearch-sync/
 | `categoria_principal_name` | Categoría + validación en tests |
 | `orden_web` | Prioridad comercial (sort) |
 | `es_accesorio` | Ranking + badge; calculado en sync |
+| `es_ref_usa` | Ranking + badge; `1` si SKU empieza con `ref-` o `usa-` |
 | `imagen_calada` | Thumbnail; completada en sync desde `fields` |
 | `precio`, `precio_tachado`, `descuento` | Precio en UI |
 | `ID` | Primary key del documento |
@@ -533,11 +546,12 @@ meilisearch-sync/
 |---|---|
 | Sync lento o timeout | `SYNC_BATCH_SIZE`, tamaño de docs (~7 KB) |
 | Accesorios arriba del producto | `es_accesorio:asc` + sort `orden_web`; correr `npm run test:search` |
+| SKU ref-/usa- arriba del principal | `es_ref_usa:asc` debe ser la **primera** ranking rule; correr `npm run settings` |
 | Imágenes faltantes | Campo `fields` en BQ; heurística `extractImageFromFields` |
 | API 500 "marca is not filterable" | Correr `npm run settings` o `npm run sync` para aplicar filterable attributes |
 | Pestañas / categorías vacías | Mismo: `marca` y `categoria_principal_name` deben ser filterable |
 | API 500 "Missing env…" | Variables `MEILISEARCH_*` en `.env` o Vercel |
-| Tests fallan | Ver hints: `ranking`, `accesorio`, `catalogo` |
+| Tests fallan | Ver hints: `ranking`, `ref_usa`, `accesorio`, `catalogo` |
 
 ---
 
@@ -551,7 +565,7 @@ npm run sync           # sincronización completa
 npm run sync:watch     # sync cada 10 min
 npm run settings       # solo settings del índice (rápido)
 npm run web            # UI + API local en :3000
-npm run test:search    # 300 tests de relevancia
+npm run test:search    # 308 tests de relevancia
 ```
 
 ---

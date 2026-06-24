@@ -44,6 +44,7 @@ const DEFAULT_DISPLAYED_ATTRIBUTES = [
   'precio_12_cuotas',
   'post_modified',
   'es_accesorio',
+  'es_ref_usa',
 ];
 
 const DEFAULT_FILTERABLE_ATTRIBUTES = ['marca', 'categoria_principal_name'];
@@ -112,6 +113,7 @@ function parseFilterableAttributes() {
 
 function buildRankingRules(sortField) {
   return [
+    'es_ref_usa:asc',
     'words',
     'typo',
     'proximity',

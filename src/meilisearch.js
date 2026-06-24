@@ -31,7 +31,7 @@ export async function ensureIndex(client, config) {
   }
 
   if (config.sortField) {
-    settings.sortableAttributes = [config.sortField, 'es_accesorio'];
+    settings.sortableAttributes = [config.sortField, 'es_ref_usa', 'es_accesorio'];
   }
 
   if (config.filterableAttributes?.length) {

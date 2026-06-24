@@ -6,11 +6,24 @@ const metaEl = document.getElementById('meta');
 const showScoresEl = document.getElementById('show-scores');
 const categoriesSection = document.getElementById('categories');
 const categoryListEl = document.getElementById('category-list');
+const loadMoreStatusEl = document.getElementById('load-more-status');
 const tabs = document.querySelectorAll('.tab');
+
+const PAGE_SIZE = 20;
 
 let debounceTimer;
 let scope = 'bidcom';
 let selectedCategory = null;
+let activeSearchId = 0;
+let loadMoreObserver;
+
+const pagination = {
+  query: '',
+  offset: 0,
+  total: 0,
+  loading: false,
+  hasMore: false,
+};
 
 function setScope(nextScope) {
   scope = nextScope;
@@ -66,6 +79,7 @@ function renderHit(hit, index) {
       ? `<span class="badge badge-muted">${escapeHtml(hit.categoria_principal_name)}</span>`
       : '',
     hit.orden_web != null ? `<span class="badge badge-muted">ow ${hit.orden_web}</span>` : '',
+    hit.es_ref_usa === 1 ? `<span class="badge badge-muted">ref/usa</span>` : '',
     hit.es_accesorio === 1 ? `<span class="badge badge-warn">accesorio</span>` : '',
     score,
   ]
@@ -124,8 +138,67 @@ function renderCategories(categories) {
   }
 }
 
-async function search(query) {
-  const params = new URLSearchParams({ q: query, limit: '20', scope });
+function updateMeta(shown, total, processingTimeMs) {
+  const parts = [`${total.toLocaleString('es-AR')} resultados`];
+  if (shown > 0 && shown < total) {
+    parts.push(`mostrando ${shown.toLocaleString('es-AR')}`);
+  }
+  if (processingTimeMs != null) {
+    parts.push(`${processingTimeMs} ms`);
+  }
+  metaEl.textContent = parts.join(' · ');
+}
+
+function setLoadMoreStatus(message) {
+  if (message) {
+    loadMoreStatusEl.hidden = false;
+    loadMoreStatusEl.textContent = message;
+  } else {
+    loadMoreStatusEl.hidden = true;
+    loadMoreStatusEl.textContent = '';
+  }
+}
+
+function updatePagination(query, offset, total) {
+  pagination.query = query;
+  pagination.offset = offset;
+  pagination.total = total;
+  pagination.hasMore = offset < total;
+}
+
+function setupLoadMoreObserver(searchId) {
+  loadMoreObserver?.disconnect();
+
+  if (!pagination.hasMore) {
+    setLoadMoreStatus('');
+    return;
+  }
+
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      if (
+        entries[0]?.isIntersecting &&
+        searchId === activeSearchId &&
+        pagination.hasMore &&
+        !pagination.loading
+      ) {
+        loadMore(searchId);
+      }
+    },
+    { rootMargin: '240px' },
+  );
+
+  loadMoreObserver.observe(loadMoreStatusEl);
+}
+
+function buildSearchParams(query, offset) {
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(PAGE_SIZE),
+    offset: String(offset),
+    scope,
+  });
+
   if (selectedCategory) {
     params.set('category', selectedCategory);
   }
@@ -133,38 +206,114 @@ async function search(query) {
     params.set('scores', '1');
   }
 
-  statusEl.textContent = 'Buscando…';
-  resultsEl.innerHTML = '';
+  return params;
+}
 
-  const response = await fetch(`/api/search?${params}`);
-  const data = await response.json();
+async function fetchPage(query, offset, { append, searchId }) {
+  pagination.loading = true;
 
-  if (!response.ok) {
-    categoriesSection.hidden = true;
-    statusEl.textContent = `Error: ${data.error ?? response.statusText}`;
-    return;
+  if (append) {
+    setLoadMoreStatus('Cargando más resultados…');
+  } else {
+    setLoadMoreStatus('');
+    statusEl.textContent = 'Buscando…';
+    resultsEl.innerHTML = '';
   }
 
-  const total = data.estimatedTotalHits ?? data.hits.length;
-  metaEl.textContent = `${total.toLocaleString('es-AR')} resultados · ${data.processingTimeMs} ms`;
+  try {
+    const response = await fetch(`/api/search?${buildSearchParams(query, offset)}`);
+    const data = await response.json();
+
+    if (searchId !== activeSearchId) {
+      return null;
+    }
+
+    if (!response.ok) {
+      categoriesSection.hidden = true;
+      statusEl.textContent = `Error: ${data.error ?? response.statusText}`;
+      setLoadMoreStatus('');
+      return null;
+    }
+
+    const total = data.estimatedTotalHits ?? data.hits.length;
+    const nextOffset = offset + data.hits.length;
+    updatePagination(query, nextOffset, total);
+    updateMeta(nextOffset, total, data.processingTimeMs);
+
+    if (!query) {
+      categoriesSection.hidden = true;
+      statusEl.textContent = 'Escribí algo para buscar.';
+      setLoadMoreStatus('');
+      return null;
+    }
+
+    if (!append) {
+      renderCategories(data.categories);
+    }
+
+    if (data.hits.length === 0 && !append) {
+      statusEl.textContent = selectedCategory
+        ? 'Sin productos en esa categoría.'
+        : 'Sin resultados.';
+      setLoadMoreStatus('');
+      return null;
+    }
+
+    const html = data.hits.map((hit, index) => renderHit(hit, offset + index)).join('');
+
+    if (append) {
+      resultsEl.insertAdjacentHTML('beforeend', html);
+    } else {
+      statusEl.textContent = selectedCategory ? `Filtrando: ${selectedCategory}` : '';
+      resultsEl.innerHTML = html;
+    }
+
+    if (pagination.hasMore) {
+      setLoadMoreStatus('Deslizá para cargar más');
+    } else if (nextOffset > 0) {
+      setLoadMoreStatus('Fin de los resultados');
+    } else {
+      setLoadMoreStatus('');
+    }
+
+    setupLoadMoreObserver(searchId);
+    return data;
+  } finally {
+    if (searchId === activeSearchId) {
+      pagination.loading = false;
+    }
+  }
+}
+
+async function search(query) {
+  activeSearchId += 1;
+  const searchId = activeSearchId;
+  loadMoreObserver?.disconnect();
+  updatePagination(query, 0, 0);
 
   if (!query) {
+    resultsEl.innerHTML = '';
     categoriesSection.hidden = true;
+    metaEl.textContent = '';
     statusEl.textContent = 'Escribí algo para buscar.';
+    setLoadMoreStatus('');
     return;
   }
 
-  renderCategories(data.categories);
+  await fetchPage(query, 0, { append: false, searchId });
+}
 
-  if (data.hits.length === 0) {
-    statusEl.textContent = selectedCategory
-      ? 'Sin productos en esa categoría.'
-      : 'Sin resultados.';
+async function loadMore(searchId) {
+  if (
+    searchId !== activeSearchId ||
+    pagination.loading ||
+    !pagination.hasMore ||
+    !pagination.query
+  ) {
     return;
   }
 
-  statusEl.textContent = selectedCategory ? `Filtrando: ${selectedCategory}` : '';
-  resultsEl.innerHTML = data.hits.map(renderHit).join('');
+  await fetchPage(pagination.query, pagination.offset, { append: true, searchId });
 }
 
 form.addEventListener('submit', (event) => {

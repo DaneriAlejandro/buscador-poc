@@ -45,10 +45,11 @@ Tarda unos **4–6 minutos** para ~21.600 productos (lectura BigQuery + upsert e
 npm run test:search
 ```
 
-Ejecuta **300 búsquedas** de calidad:
+Ejecuta **308 búsquedas** de calidad:
 
 - **100 manuales** — términos curados en `src/manual-queries.js`
 - **200 generadas** — categorías, marcas y líneas desde BigQuery
+- **8 ref_usa** — queries donde conviven SKU normales y `ref-`/`usa-`; el #1 no puede ser ref/usa si hay normales (`src/ref-usa-queries.js`)
 
 Opciones:
 
@@ -126,16 +127,16 @@ Campos y orden en la vista previa / respuesta de búsqueda:
 ### Ranking rules
 
 ```
-words → typo → proximity → attributeRank → wordPosition → sort → exactness → es_accesorio:asc
+es_ref_usa:asc → words → typo → proximity → attributeRank → wordPosition → sort → exactness → es_accesorio:asc
 ```
 
-- Primero gana la **relevancia textual**.
-- La regla **`sort`** (con `sort: ['orden_web:asc']` en cada query) ordena por prioridad web.
-- `es_accesorio:asc` deja accesorios debajo de productos principales.
+- `es_ref_usa:asc` va **primera**: ningún SKU `ref-`/`usa-` queda arriba de un producto normal, sin importar relevancia ni `orden_web`.
+- Después gana la **relevancia textual** y el **`sort`** con `orden_web`.
+- `es_accesorio:asc` deja accesorios debajo de productos principales (entre los no ref/usa).
 
 ### Sortable y filterable
 
-- **Sortable:** `orden_web`, `es_accesorio`
+- **Sortable:** `orden_web`, `es_ref_usa`, `es_accesorio`
 - **Filterable:** `marca`, `categoria_principal_name` (pestañas Gadnic y chips de categoría)
 
 ## Normalización de documentos
@@ -149,6 +150,8 @@ Durante el sync cada fila se transforma antes de subirse:
 | `imagen_calada` | Si viene vacío, se extrae del JSON `fields` (URL `1000x1000`) |
 | Fechas | ISO string |
 | NUMERIC de BQ | String entero |
+| `es_accesorio` | `1` si el título parece accesorio, `0` si no |
+| `es_ref_usa` | `1` si `codigo_aguila` empieza con `ref-` o `usa-`, `0` si no |
 
 ## Búsqueda semántica (embedder) — no activa
 
@@ -215,7 +218,11 @@ Meilisearch muestra `imagen_calada`. El sync la completa desde `fields` si viene
 
 ### Accesorios arriba del producto real
 
-Verificá `es_accesorio:asc` en ranking rules y que la búsqueda use `sort: ['orden_web:asc']`. Corré `npm run test:search`.
+Verificá `es_accesorio:asc` y `es_ref_usa:asc` en ranking rules y que la búsqueda use `sort: ['orden_web:asc']`. Corré `npm run test:search`.
+
+### SKUs ref- / usa- arriba del producto principal
+
+Verificá que `es_ref_usa:asc` sea la **primera** ranking rule y corré `npm run settings`.
 
 ### Filtros / categorías no funcionan en la web
 
