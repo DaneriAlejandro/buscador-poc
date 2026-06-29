@@ -1,0 +1,63 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop, feature/*, hotfix/*, bugfix/*]
+
+jobs:
+  build-dockerfile:
+    uses: Bidcomsrl/devops/.github/workflows/build-docker-image.yaml@main
+    with:
+      image-name: meilisearch-sync
+      context-path: .
+    secrets:
+      REGISTRY_TOKEN: ${{ secrets.DOCKER_PASSWORD }}
+      REGISTRY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop'
+    needs: build-dockerfile
+    uses: Bidcomsrl/devops/.github/workflows/deploy-to-environment.yaml@main
+    with:
+      image-uri: ${{ needs.build-dockerfile.outputs.image-uri }}
+      image-tag: ${{ needs.build-dockerfile.outputs.image-tag }}
+      app-name: meilisearch-sync
+      environment: staging
+      secret-name-org: bidcom
+      port: 3000
+      ingress-enabled: 'false'
+      values-file-path: apps/meilisearch-sync
+      check-probes: 'false'
+      command: '["node", "src/index.js", "--interval", "10"]'
+      aws-region: us-west-2
+      eks-cluster-name: bidcom-staging
+    secrets:
+      REGISTRY_TOKEN: ${{ secrets.DOCKER_PASSWORD }}
+      REGISTRY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      ORG_TOKEN: ${{ secrets.ORG_TOKEN }}
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    needs: build-dockerfile
+    uses: Bidcomsrl/devops/.github/workflows/deploy-to-environment.yaml@main
+    with:
+      image-uri: ${{ needs.build-dockerfile.outputs.image-uri }}
+      image-tag: ${{ needs.build-dockerfile.outputs.image-tag }}
+      app-name: meilisearch-sync
+      environment: production
+      secret-name-org: bidcom
+      port: 3000
+      ingress-enabled: 'false'
+      values-file-path: apps/meilisearch-sync
+      check-probes: 'false'
+      command: '["node", "src/index.js", "--interval", "10"]'
+      aws-region: us-east-1
+      eks-cluster-name: bidcom-production-vpc
+    secrets:
+      REGISTRY_TOKEN: ${{ secrets.DOCKER_PASSWORD }}
+      REGISTRY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      ORG_TOKEN: ${{ secrets.ORG_TOKEN }}

@@ -214,7 +214,7 @@ ORDER BY orden_web ASC
 | `BIGQUERY_QUERY` | No | ver arriba | Query SQL custom |
 | `BIGQUERY_LOCATION` | No | `US` | Región de ejecución |
 | `MEILISEARCH_HOST` | Sí | — | URL de Meilisearch |
-| `MEILISEARCH_API_KEY` | Sí | — | API key |
+| `MEILISEARCH_API_KEY_SYNC` | Sí | — | API key con permisos de admin (sync, settings, tests) |
 | `MEILISEARCH_INDEX` | Sí | — | Índice destino (`productos-BQ`) |
 | `MEILISEARCH_PRIMARY_KEY` | No | `id` | Campo ID (`ID`) |
 | `MEILISEARCH_SORT_FIELD` | No | `orden_web` | Campo de prioridad web |
@@ -339,7 +339,7 @@ Solo requiere variables de Meilisearch (no BigQuery).
 | Variable | Requerida | Default | Uso |
 |---|---|---|---|
 | `MEILISEARCH_HOST` | Sí | — | URL de Meilisearch |
-| `MEILISEARCH_API_KEY` | Sí | — | API key |
+| `MEILISEARCH_API_KEY` | Sí | — | API key de búsqueda (solo lectura recomendada) |
 | `MEILISEARCH_INDEX` | Sí | — | Nombre del índice |
 | `MEILISEARCH_SORT_FIELD` | No | `orden_web` | Campo de sort en cada búsqueda |
 | `SEARCH_WEB_PORT` | No | `3000` | Puerto del servidor local |

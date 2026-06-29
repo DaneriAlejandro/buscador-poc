@@ -80,6 +80,18 @@ Solo la UI + API (`public/` + `api/`). No corre el sync.
 
 Documentación completa: [`docs/DOCUMENTACION.md`](docs/DOCUMENTACION.md).
 
+### Deploy sync (K8s, cada 10 min)
+
+Worker sin HTTP: corre `node src/index.js --interval 10` en un pod.
+
+1. **AWS Secrets Manager** (único paso manual): crear `bidcom/staging/meilisearch-sync` y `bidcom/production/meilisearch-sync` con las vars del sync (`BIGQUERY_*`, `MEILISEARCH_*`, `SYNC_*`).
+2. Push a `develop` en `upstream` → el pipeline crea/actualiza solo la app en `infra-staging` (values + ArgoCD) y despliega.
+3. Push a `main` → lo mismo en `infra-production`.
+
+No hace falta copiar archivos a los repos de infra: `deploy-to-environment` los genera con `configureDeploy.sh` en el primer deploy.
+
+El workflow está en `.github/workflows/build-and-publish.yaml`.
+
 ## Variables de entorno
 
 | Variable | Requerida | Default | Descripción |
@@ -90,7 +102,8 @@ Documentación completa: [`docs/DOCUMENTACION.md`](docs/DOCUMENTACION.md).
 | `BIGQUERY_QUERY` | No | ver abajo | Query SQL custom |
 | `BIGQUERY_LOCATION` | No | `US` | Región de ejecución |
 | `MEILISEARCH_HOST` | Sí | — | URL de Meilisearch |
-| `MEILISEARCH_API_KEY` | Sí | — | API key |
+| `MEILISEARCH_API_KEY_SYNC` | Sí | — | API key con permisos de admin (sync, settings, tests) |
+| `MEILISEARCH_API_KEY` | Sí (web) | — | API key de búsqueda (`npm run web`, Vercel) |
 | `MEILISEARCH_INDEX` | Sí | — | Índice destino (`productos-BQ`) |
 | `MEILISEARCH_PRIMARY_KEY` | No | `id` | Campo ID (`ID`) |
 | `MEILISEARCH_SORT_FIELD` | No | `orden_web` | Campo de prioridad web |

@@ -181,7 +181,7 @@ export function loadConfig() {
     },
     meilisearch: {
       host: required('MEILISEARCH_HOST'),
-      apiKey: required('MEILISEARCH_API_KEY'),
+      apiKey: required('MEILISEARCH_API_KEY_SYNC'),
       indexName: required('MEILISEARCH_INDEX'),
       primaryKey,
       sortField,
