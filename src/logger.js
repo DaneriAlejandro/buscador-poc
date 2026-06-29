@@ -24,7 +24,7 @@ function formatUnknownError(error) {
 function buildExceptionLog(input) {
   const { message, error, operation, ...extra } = input;
   const base = {
-    message,
+    message: enrichMessage(message, extra),
     ...(operation ? { operation } : {}),
     ...extra,
   };
@@ -32,6 +32,7 @@ function buildExceptionLog(input) {
   if (error instanceof Error) {
     return {
       ...base,
+      message: `${enrichMessage(message, extra)}: ${error.message}`,
       error: error.message,
       errorType: error.name,
       stack: error.stack,
@@ -42,6 +43,53 @@ function buildExceptionLog(input) {
     ...base,
     error: formatUnknownError(error),
   };
+}
+
+function enrichMessage(message, fields = {}) {
+  const parts = [];
+
+  if (fields.processed != null && fields.total != null) {
+    const pct = Math.round((fields.processed / fields.total) * 100);
+    parts.push(`${fields.processed}/${fields.total} (${pct}%)`);
+  }
+
+  if (fields.batchNumber != null && fields.batchCount != null) {
+    parts.push(`batch ${fields.batchNumber}/${fields.batchCount}`);
+  }
+
+  if (fields.rowCount != null) {
+    parts.push(`${fields.rowCount} rows`);
+  }
+
+  if (fields.upserted != null) {
+    parts.push(`${fields.upserted} upserted`);
+  }
+
+  if (fields.deleted != null) {
+    parts.push(`${fields.deleted} deleted`);
+  }
+
+  if (fields.elapsedSeconds != null) {
+    parts.push(`${fields.elapsedSeconds}s`);
+  }
+
+  if (fields.indexName) {
+    parts.push(fields.indexName);
+  }
+
+  if (fields.reason) {
+    parts.push(String(fields.reason));
+  }
+
+  if (fields.intervalMinutes != null) {
+    parts.push(`every ${fields.intervalMinutes}m`);
+  }
+
+  if (parts.length === 0) {
+    return message;
+  }
+
+  return `${message} | ${parts.join(' | ')}`;
 }
 
 function formatMessage(level, args) {
@@ -73,9 +121,11 @@ function formatMessage(level, args) {
       return { ...base, value: args.toISOString() };
     }
 
+    const { message, ...fields } = args;
     return {
-      ...args,
+      ...fields,
       ...base,
+      message: enrichMessage(message, fields),
     };
   }
 
@@ -108,22 +158,8 @@ function write(level, payload) {
 }
 
 function formatDevLine(formatted) {
-  const { timestamp, level, message, service, stack, ...context } = formatted;
-  const prefix = `[${service}] [${level}]`;
-
-  if (message) {
-    const contextKeys = Object.keys(context).filter(
-      (key) => context[key] !== undefined && key !== 'error' && key !== 'errorType',
-    );
-
-    if (contextKeys.length === 0) {
-      return `${prefix} ${message}`;
-    }
-
-    return `${prefix} ${message} ${JSON.stringify(context)}`;
-  }
-
-  return `${prefix} ${JSON.stringify(formatted)}`;
+  const { message, service, level } = formatted;
+  return `[${service}] [${level}] ${message}`;
 }
 
 export const Logger = {
@@ -143,3 +179,16 @@ export const Logger = {
     write('debug', message);
   },
 };
+
+export function shouldLogProgress(batchNumber, batchCount, milestones = 4) {
+  if (batchCount <= 0) {
+    return false;
+  }
+
+  if (batchNumber === batchCount) {
+    return true;
+  }
+
+  const interval = Math.max(1, Math.ceil(batchCount / milestones));
+  return batchNumber % interval === 0;
+}

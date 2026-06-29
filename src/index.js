@@ -30,7 +30,15 @@ function assertIntervalMinutes(minutes) {
 
 async function runOnce(config) {
   const result = await syncIndex(config);
-  Logger.info({ message: 'Sync completed', operation: 'sync', ...result });
+  Logger.info({
+    message: 'Sync completed',
+    operation: 'sync',
+    rowCount: result.fetched,
+    upserted: result.upserted,
+    deleted: result.deleted,
+    elapsedSeconds: result.elapsedSeconds,
+    indexName: config.meilisearch.indexName,
+  });
   return result;
 }
 
@@ -41,7 +49,7 @@ async function runScheduled(config, intervalMinutes) {
   const tick = async (reason) => {
     if (running) {
       Logger.warn({
-        message: 'Skipping scheduled run — previous sync still in progress',
+        message: 'Sync skipped — previous run still in progress',
         operation: 'sync',
         reason,
       });
@@ -50,10 +58,9 @@ async function runScheduled(config, intervalMinutes) {
 
     running = true;
     Logger.info({
-      message: 'Starting sync run',
+      message: 'Sync started',
       operation: 'sync',
       reason: reason ?? 'scheduled',
-      startedAt: new Date().toISOString(),
     });
 
     try {

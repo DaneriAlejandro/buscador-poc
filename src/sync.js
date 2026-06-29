@@ -111,13 +111,14 @@ function normalizeDocument(row, primaryKey, sortField) {
 
 export async function syncIndex(config) {
   const startedAt = Date.now();
-  Logger.info({ message: 'Fetching rows from BigQuery', operation: 'sync' });
-
   const rows = await fetchRows(config.bigQuery);
+  const fetchSeconds = Number(((Date.now() - startedAt) / 1000).toFixed(1));
+
   Logger.info({
-    message: 'BigQuery rows fetched',
+    message: 'BigQuery fetch done',
     operation: 'sync',
     rowCount: rows.length,
+    elapsedSeconds: fetchSeconds,
   });
 
   const documents = rows.map((row) =>
@@ -126,34 +127,43 @@ export async function syncIndex(config) {
   const client = createMeilisearchClient(config.meilisearch);
   const index = await ensureIndex(client, config.meilisearch);
 
-  Logger.info({
-    message: 'Upserting documents into Meilisearch',
-    operation: 'sync',
-    indexName: config.meilisearch.indexName,
-    documentCount: documents.length,
-  });
+  const upsertStartedAt = Date.now();
   const upserted = await upsertDocuments(
     index,
     documents,
     config.meilisearch.primaryKey,
     config.sync.batchSize,
   );
-  Logger.info({ message: 'Documents upserted', operation: 'sync', upserted });
+  const upsertSeconds = Number(((Date.now() - upsertStartedAt) / 1000).toFixed(1));
+
+  Logger.info({
+    message: 'Meilisearch upsert done',
+    operation: 'sync',
+    upserted,
+    indexName: config.meilisearch.indexName,
+    elapsedSeconds: upsertSeconds,
+  });
 
   let deleted = 0;
   if (config.sync.deleteStale) {
-    Logger.info({ message: 'Deleting stale documents', operation: 'sync' });
     deleted = await deleteStaleDocuments(
       index,
       documents.map((document) => document[config.meilisearch.primaryKey]),
       config.meilisearch.primaryKey,
       config.sync.batchSize,
     );
-    Logger.info({ message: 'Stale documents deleted', operation: 'sync', deleted });
+
+    if (deleted > 0) {
+      Logger.info({
+        message: 'Stale documents removed',
+        operation: 'sync',
+        deleted,
+        indexName: config.meilisearch.indexName,
+      });
+    }
   }
 
-  const elapsedSeconds = Number(((Date.now() - startedAt) / 1000).toFixed(2));
-  Logger.info({ message: 'Sync finished', operation: 'sync', elapsedSeconds });
+  const elapsedSeconds = Number(((Date.now() - startedAt) / 1000).toFixed(1));
 
   return {
     fetched: rows.length,

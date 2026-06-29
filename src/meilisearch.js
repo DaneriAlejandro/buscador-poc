@@ -1,5 +1,5 @@
 import { MeiliSearch } from 'meilisearch';
-import { Logger } from './logger.js';
+import { Logger, shouldLogProgress } from './logger.js';
 
 export function createMeilisearchClient(config) {
   return new MeiliSearch({
@@ -48,16 +48,11 @@ export async function ensureIndex(client, config) {
   }
 
   if (Object.keys(settings).length > 0) {
-    Logger.info({ message: 'Updating index settings', operation: 'sync' });
     await index.updateSettings(settings).waitTask();
-    Logger.info({
+    Logger.debug({
       message: 'Index settings applied',
       operation: 'sync',
-      searchableAttributes: settings.searchableAttributes?.length,
-      displayedAttributes: settings.displayedAttributes?.slice(0, 5).concat('...'),
-      sortableAttributes: settings.sortableAttributes,
-      filterableAttributes: settings.filterableAttributes,
-      rankingRules: settings.rankingRules,
+      indexName: config.indexName,
     });
   }
 
@@ -71,21 +66,19 @@ export async function upsertDocuments(index, documents, primaryKey, batchSize) {
   for (let offset = 0; offset < documents.length; offset += batchSize) {
     const batch = documents.slice(offset, offset + batchSize);
     const batchNumber = Math.floor(offset / batchSize) + 1;
-    Logger.info({
-      message: 'Upserting batch',
-      operation: 'sync',
-      batchNumber,
-      batchCount: batches,
-      batchSize: batch.length,
-    });
     await index.addDocuments(batch, { primaryKey }).waitTask();
     total += batch.length;
-    Logger.info({
-      message: 'Upsert progress',
-      operation: 'sync',
-      processed: total,
-      total: documents.length,
-    });
+
+    if (shouldLogProgress(batchNumber, batches)) {
+      Logger.info({
+        message: 'Upsert progress',
+        operation: 'sync',
+        processed: total,
+        total: documents.length,
+        batchNumber,
+        batchCount: batches,
+      });
+    }
   }
 
   return total;
@@ -116,14 +109,6 @@ export async function deleteStaleDocuments(index, sourceIds, primaryKey, batchSi
     }
 
     offset += result.results.length;
-    if (offset % (batchSize * 10) === 0 || result.results.length < batchSize) {
-      Logger.info({
-        message: 'Stale scan progress',
-        operation: 'sync',
-        scanned: offset,
-        staleCount: staleIds.length,
-      });
-    }
 
     if (result.results.length < batchSize) {
       break;
@@ -134,17 +119,8 @@ export async function deleteStaleDocuments(index, sourceIds, primaryKey, batchSi
     return 0;
   }
 
-  const deleteBatches = Math.ceil(staleIds.length / batchSize);
   for (let deleteOffset = 0; deleteOffset < staleIds.length; deleteOffset += batchSize) {
     const batch = staleIds.slice(deleteOffset, deleteOffset + batchSize);
-    const batchNumber = Math.floor(deleteOffset / batchSize) + 1;
-    Logger.info({
-      message: 'Deleting stale batch',
-      operation: 'sync',
-      batchNumber,
-      batchCount: deleteBatches,
-      batchSize: batch.length,
-    });
     await index.deleteDocuments(batch).waitTask();
   }
 
