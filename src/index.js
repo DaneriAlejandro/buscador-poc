@@ -1,4 +1,5 @@
 import { loadConfig } from './config.js';
+import { Logger } from './logger.js';
 import { syncIndex } from './sync.js';
 
 function parseIntervalMinutes() {
@@ -29,7 +30,7 @@ function assertIntervalMinutes(minutes) {
 
 async function runOnce(config) {
   const result = await syncIndex(config);
-  console.log('[sync] Summary:', JSON.stringify(result));
+  Logger.info({ message: 'Sync completed', operation: 'sync', ...result });
   return result;
 }
 
@@ -39,25 +40,33 @@ async function runScheduled(config, intervalMinutes) {
 
   const tick = async (reason) => {
     if (running) {
-      console.log('[sync] Skipping scheduled run — previous sync still in progress');
+      Logger.warn({
+        message: 'Skipping scheduled run — previous sync still in progress',
+        operation: 'sync',
+        reason,
+      });
       return;
     }
 
     running = true;
-    const label = reason ? ` (${reason})` : '';
-    console.log(`[sync] Starting run${label} at ${new Date().toISOString()}`);
+    Logger.info({
+      message: 'Starting sync run',
+      operation: 'sync',
+      reason: reason ?? 'scheduled',
+      startedAt: new Date().toISOString(),
+    });
 
     try {
       await runOnce(config);
     } catch (error) {
-      console.error('[sync] Failed:', error.message);
+      Logger.error({ message: 'Sync run failed', operation: 'sync', error });
     } finally {
       running = false;
     }
   };
 
   const shutdown = (signal) => {
-    console.log(`[sync] Received ${signal}, stopping scheduler`);
+    Logger.info({ message: 'Stopping scheduler', operation: 'sync', signal });
     if (timer) {
       clearInterval(timer);
     }
@@ -67,12 +76,16 @@ async function runScheduled(config, intervalMinutes) {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-  console.log(`[sync] Scheduler active — every ${intervalMinutes} minute(s)`);
+  Logger.info({
+    message: 'Scheduler active',
+    operation: 'sync',
+    intervalMinutes,
+  });
   await tick('initial');
 
   timer = setInterval(() => {
     tick('scheduled').catch((error) => {
-      console.error('[sync] Scheduler tick failed:', error.message);
+      Logger.error({ message: 'Scheduler tick failed', operation: 'sync', error });
     });
   }, intervalMinutes * 60 * 1000);
 }
@@ -90,6 +103,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('[sync] Failed:', error.message);
+  Logger.error({ message: 'Sync process failed', operation: 'sync', error });
   process.exitCode = 1;
 });

@@ -1,4 +1,5 @@
 import { fetchRows } from './bigquery.js';
+import { Logger } from './logger.js';
 import {
   createMeilisearchClient,
   deleteStaleDocuments,
@@ -110,10 +111,14 @@ function normalizeDocument(row, primaryKey, sortField) {
 
 export async function syncIndex(config) {
   const startedAt = Date.now();
-  console.log('[sync] Fetching rows from BigQuery...');
+  Logger.info({ message: 'Fetching rows from BigQuery', operation: 'sync' });
 
   const rows = await fetchRows(config.bigQuery);
-  console.log(`[sync] BigQuery returned ${rows.length} rows`);
+  Logger.info({
+    message: 'BigQuery rows fetched',
+    operation: 'sync',
+    rowCount: rows.length,
+  });
 
   const documents = rows.map((row) =>
     normalizeDocument(row, config.meilisearch.primaryKey, config.meilisearch.sortField),
@@ -121,34 +126,39 @@ export async function syncIndex(config) {
   const client = createMeilisearchClient(config.meilisearch);
   const index = await ensureIndex(client, config.meilisearch);
 
-  console.log(`[sync] Upserting documents into index "${config.meilisearch.indexName}"...`);
+  Logger.info({
+    message: 'Upserting documents into Meilisearch',
+    operation: 'sync',
+    indexName: config.meilisearch.indexName,
+    documentCount: documents.length,
+  });
   const upserted = await upsertDocuments(
     index,
     documents,
     config.meilisearch.primaryKey,
     config.sync.batchSize,
   );
-  console.log(`[sync] Upserted ${upserted} documents`);
+  Logger.info({ message: 'Documents upserted', operation: 'sync', upserted });
 
   let deleted = 0;
   if (config.sync.deleteStale) {
-    console.log('[sync] Deleting stale documents...');
+    Logger.info({ message: 'Deleting stale documents', operation: 'sync' });
     deleted = await deleteStaleDocuments(
       index,
       documents.map((document) => document[config.meilisearch.primaryKey]),
       config.meilisearch.primaryKey,
       config.sync.batchSize,
     );
-    console.log(`[sync] Deleted ${deleted} stale documents`);
+    Logger.info({ message: 'Stale documents deleted', operation: 'sync', deleted });
   }
 
-  const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(2);
-  console.log(`[sync] Done in ${elapsedSeconds}s`);
+  const elapsedSeconds = Number(((Date.now() - startedAt) / 1000).toFixed(2));
+  Logger.info({ message: 'Sync finished', operation: 'sync', elapsedSeconds });
 
   return {
     fetched: rows.length,
     upserted,
     deleted,
-    elapsedSeconds: Number(elapsedSeconds),
+    elapsedSeconds,
   };
 }

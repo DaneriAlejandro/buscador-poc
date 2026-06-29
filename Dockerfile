@@ -3,6 +3,7 @@ FROM node:22.15.1-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV SERVICE_NAME=meilisearch-sync
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
