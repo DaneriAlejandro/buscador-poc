@@ -105,7 +105,7 @@ El workflow está en `.github/workflows/build-and-publish.yaml`.
 | `MEILISEARCH_API_KEY_SYNC` | Sí | — | API key con permisos de admin (sync, settings, tests) |
 | `MEILISEARCH_API_KEY` | Sí (web) | — | API key de búsqueda (`npm run web`, Vercel) |
 | `MEILISEARCH_INDEX` | Sí | — | Índice destino (`productos-BQ`) |
-| `MEILISEARCH_PRIMARY_KEY` | No | `id` | Campo ID (`ID`) |
+| `MEILISEARCH_PRIMARY_KEY` | No | `ID` | Campo ID en BigQuery y Meilisearch |
 | `MEILISEARCH_SORT_FIELD` | No | `orden_web` | Campo de prioridad web |
 | `MEILISEARCH_SEARCHABLE_ATTRIBUTES` | No | ver `config.js` | Lista separada por comas |
 | `MEILISEARCH_DISPLAYED_ATTRIBUTES` | No | ver `config.js` | Orden de campos en resultados |

@@ -151,7 +151,7 @@ export function loadConfig() {
   const credentials = parseCredentials();
   const dataset = required('BIGQUERY_DATASET');
   const table = required('BIGQUERY_TABLE');
-  const primaryKey = process.env.MEILISEARCH_PRIMARY_KEY?.trim() || 'id';
+  const primaryKey = process.env.MEILISEARCH_PRIMARY_KEY?.trim() || 'ID';
   const sortField = assertSqlIdentifier(
     process.env.MEILISEARCH_SORT_FIELD?.trim() || 'orden_web',
     'MEILISEARCH_SORT_FIELD',

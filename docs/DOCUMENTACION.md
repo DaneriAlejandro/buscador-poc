@@ -216,7 +216,7 @@ ORDER BY orden_web ASC
 | `MEILISEARCH_HOST` | Sí | — | URL de Meilisearch |
 | `MEILISEARCH_API_KEY_SYNC` | Sí | — | API key con permisos de admin (sync, settings, tests) |
 | `MEILISEARCH_INDEX` | Sí | — | Índice destino (`productos-BQ`) |
-| `MEILISEARCH_PRIMARY_KEY` | No | `id` | Campo ID (`ID`) |
+| `MEILISEARCH_PRIMARY_KEY` | No | `ID` | Campo ID en BigQuery y Meilisearch |
 | `MEILISEARCH_SORT_FIELD` | No | `orden_web` | Campo de prioridad web |
 | `MEILISEARCH_FILTERABLE_ATTRIBUTES` | No | `marca,categoria_principal_name` | Filtros y facets (web) |
 | `SYNC_BATCH_SIZE` | No | `1000` | Documentos por lote |
