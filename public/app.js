@@ -115,27 +115,34 @@ function renderHit(hit, index) {
   `;
 }
 
+let categoryOptions = [];
+
 function renderCategories(categories) {
   categoryListEl.innerHTML = '';
+  categoryOptions = categories ?? [];
 
-  if (!categories?.length) {
+  if (!categoryOptions.length) {
     categoriesSection.hidden = true;
     return;
   }
 
   categoriesSection.hidden = false;
 
-  for (const { name, count } of categories) {
+  for (const { slug, name, count } of categoryOptions) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `category-chip${selectedCategory === name ? ' active' : ''}`;
+    button.className = `category-chip${selectedCategory === slug ? ' active' : ''}`;
     button.innerHTML = `${escapeHtml(name)} <span class="category-count">${count}</span>`;
     button.addEventListener('click', () => {
-      selectedCategory = selectedCategory === name ? null : name;
+      selectedCategory = selectedCategory === slug ? null : slug;
       search(input.value.trim());
     });
     categoryListEl.appendChild(button);
   }
+}
+
+function getSelectedCategoryLabel() {
+  return categoryOptions.find((category) => category.slug === selectedCategory)?.name ?? selectedCategory;
 }
 
 function updateMeta(shown, total, processingTimeMs) {
@@ -264,7 +271,9 @@ async function fetchPage(query, offset, { append, searchId }) {
     if (append) {
       resultsEl.insertAdjacentHTML('beforeend', html);
     } else {
-      statusEl.textContent = selectedCategory ? `Filtrando: ${selectedCategory}` : '';
+      statusEl.textContent = selectedCategory
+        ? `Filtrando: ${getSelectedCategoryLabel()}`
+        : '';
       resultsEl.innerHTML = html;
     }
 

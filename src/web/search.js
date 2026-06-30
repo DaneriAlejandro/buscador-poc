@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { MeiliSearch } from 'meilisearch';
 import {
   CATEGORY_FACET,
@@ -6,7 +9,10 @@ import {
   parseFacetCategories,
 } from './config.js';
 
+const categoryLabelsPath = join(dirname(fileURLToPath(import.meta.url)), '../../public/categories.json');
+
 let cachedIndex;
+let categoryLabelsPromise;
 
 function getIndex() {
   if (!cachedIndex) {
@@ -18,6 +24,16 @@ function getIndex() {
     cachedIndex = { index: client.index(config.indexName), config };
   }
   return cachedIndex;
+}
+
+async function loadCategoryLabels() {
+  if (!categoryLabelsPromise) {
+    categoryLabelsPromise = readFile(categoryLabelsPath, 'utf8')
+      .then((raw) => JSON.parse(raw))
+      .catch(() => ({}));
+  }
+
+  return categoryLabelsPromise;
 }
 
 export async function searchProducts(params) {
@@ -47,7 +63,10 @@ export async function searchProducts(params) {
     searchParams.filter = filter;
   }
 
-  const response = await index.search(q, searchParams);
+  const [response, categoryLabels] = await Promise.all([
+    index.search(q, searchParams),
+    loadCategoryLabels(),
+  ]);
 
   return {
     query: q,
@@ -59,7 +78,7 @@ export async function searchProducts(params) {
     sort,
     processingTimeMs: response.processingTimeMs,
     estimatedTotalHits: response.estimatedTotalHits ?? response.hits.length,
-    categories: parseFacetCategories(response.facetDistribution),
+    categories: parseFacetCategories(response.facetDistribution, categoryLabels),
     hits: response.hits,
   };
 }

@@ -1,5 +1,13 @@
 import { fetchRows } from './bigquery.js';
 import { Logger } from './logger.js';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  applyCategoryFields,
+  buildCategoryTaxonomy,
+  getCategoryLabels,
+  saveCategoryLabels,
+} from './categories.js';
 import {
   createMeilisearchClient,
   deleteStaleDocuments,
@@ -78,7 +86,7 @@ function isAccessoryTitle(title) {
   return false;
 }
 
-function normalizeDocument(row, primaryKey, sortField) {
+function normalizeDocument(row, primaryKey, sortField, taxonomy) {
   const document = {};
 
   for (const [key, value] of Object.entries(row)) {
@@ -106,6 +114,10 @@ function normalizeDocument(row, primaryKey, sortField) {
   document.es_accesorio = isAccessoryTitle(document.post_title) ? 1 : 0;
   document.es_ref_usa = isRefUsaSku(document.codigo_aguila) ? 1 : 0;
 
+  if (!applyCategoryFields(document, taxonomy)) {
+    document.categoria_facet = null;
+  }
+
   return document;
 }
 
@@ -121,9 +133,32 @@ export async function syncIndex(config) {
     elapsedSeconds: fetchSeconds,
   });
 
-  const documents = rows.map((row) =>
-    normalizeDocument(row, config.meilisearch.primaryKey, config.meilisearch.sortField),
-  );
+  const taxonomy = buildCategoryTaxonomy(rows);
+  const categoryLabels = getCategoryLabels(taxonomy);
+  const publicDir = join(dirname(fileURLToPath(import.meta.url)), '../public');
+  const labelsPath = await saveCategoryLabels(categoryLabels, publicDir);
+
+  let unresolvedCategories = 0;
+  const documents = rows.map((row) => {
+    const document = normalizeDocument(
+      row,
+      config.meilisearch.primaryKey,
+      config.meilisearch.sortField,
+      taxonomy,
+    );
+    if (!document.categoria_facet) {
+      unresolvedCategories += 1;
+    }
+    return document;
+  });
+
+  Logger.info({
+    message: 'Category taxonomy built',
+    operation: 'sync',
+    categories: taxonomy.bySlug.size,
+    unresolvedCategories,
+    labelsPath,
+  });
   const client = createMeilisearchClient(config.meilisearch);
   const index = await ensureIndex(client, config.meilisearch);
 

@@ -109,7 +109,7 @@ El workflow está en `.github/workflows/build-and-publish.yaml`.
 | `MEILISEARCH_SORT_FIELD` | No | `orden_web` | Campo de prioridad web |
 | `MEILISEARCH_SEARCHABLE_ATTRIBUTES` | No | ver `config.js` | Lista separada por comas |
 | `MEILISEARCH_DISPLAYED_ATTRIBUTES` | No | ver `config.js` | Orden de campos en resultados |
-| `MEILISEARCH_FILTERABLE_ATTRIBUTES` | No | `marca,categoria_principal_name` | Filtros y facets en la web |
+| `MEILISEARCH_FILTERABLE_ATTRIBUTES` | No | `marca,categoria_facet` | Filtros y facets (web) |
 | `SYNC_BATCH_SIZE` | No | `1000` | Documentos por lote |
 | `SYNC_DELETE_STALE` | No | `true` | Borra docs que ya no están en BQ |
 
@@ -150,7 +150,7 @@ es_ref_usa:asc → words → typo → proximity → attributeRank → wordPositi
 ### Sortable y filterable
 
 - **Sortable:** `orden_web`, `es_ref_usa`, `es_accesorio`
-- **Filterable:** `marca`, `categoria_principal_name` (pestañas Gadnic y chips de categoría)
+- **Filterable:** `marca`, `categoria_facet` (slug canónico; chips filtran por slug, muestran name)
 
 ## Normalización de documentos
 
@@ -165,6 +165,7 @@ Durante el sync cada fila se transforma antes de subirse:
 | NUMERIC de BQ | String entero |
 | `es_accesorio` | `1` si el título parece accesorio, `0` si no |
 | `es_ref_usa` | `1` si `codigo_aguila` empieza con `ref-` o `usa-`, `0` si no |
+| `categoria_facet` | Slug canónico; calculado en sync |
 
 ## Búsqueda semántica (embedder) — no activa
 
@@ -239,7 +240,7 @@ Verificá que `es_ref_usa:asc` sea la **primera** ranking rule y corré `npm run
 
 ### Filtros / categorías no funcionan en la web
 
-Corré `npm run settings` (o `npm run sync`) para aplicar `filterableAttributes: ['marca', 'categoria_principal_name']`.
+Corré `npm run settings` (o `npm run sync`) para aplicar `filterableAttributes: ['marca', 'categoria_facet']`.
 
 ### `displayedAttributes` tarda mucho
 

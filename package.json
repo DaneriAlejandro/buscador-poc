@@ -13,6 +13,7 @@
     "sync:watch": "node src/index.js --interval 10",
     "start:sync": "node src/index.js --interval 10",
     "test:search": "node src/test-search.js",
+    "test:categories": "node src/categories.test.js",
     "settings": "node src/apply-settings.js",
     "web": "node src/web/server.js"
   },

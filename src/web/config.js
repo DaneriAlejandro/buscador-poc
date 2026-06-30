@@ -14,6 +14,7 @@ function assertSqlIdentifier(name, label) {
 }
 
 export const GADNIC_MARCA = 'Gadnic';
+export const CATEGORY_FACET = 'categoria_facet';
 
 export function loadWebConfig() {
   const sortField = assertSqlIdentifier(
@@ -28,8 +29,6 @@ export function loadWebConfig() {
     sortField,
   };
 }
-
-export const CATEGORY_FACET = 'categoria_principal_name';
 
 export function buildScopeFilter(scope) {
   if (scope === 'bidcom' || scope === 'all' || !scope) {
@@ -63,7 +62,7 @@ export function buildSearchFilter({ scope, category }) {
   return parts.join(' AND ');
 }
 
-export function parseFacetCategories(facetDistribution, limit = 12) {
+export function parseFacetCategories(facetDistribution, labels = {}, limit = 12) {
   const buckets = facetDistribution?.[CATEGORY_FACET];
   if (!buckets) {
     return [];
@@ -72,5 +71,9 @@ export function parseFacetCategories(facetDistribution, limit = 12) {
   return Object.entries(buckets)
     .sort((left, right) => right[1] - left[1])
     .slice(0, limit)
-    .map(([name, count]) => ({ name, count }));
+    .map(([slug, count]) => ({
+      slug,
+      name: labels[slug] ?? slug,
+      count,
+    }));
 }

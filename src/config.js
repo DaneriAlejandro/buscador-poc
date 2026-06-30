@@ -29,6 +29,7 @@ const DEFAULT_DISPLAYED_ATTRIBUTES = [
   'descripcion_producto',
   'categoria_principal_name',
   'categoria_principal_slug',
+  'categoria_facet',
   'linea',
   'tags',
   'orden_web',
@@ -47,7 +48,7 @@ const DEFAULT_DISPLAYED_ATTRIBUTES = [
   'es_ref_usa',
 ];
 
-const DEFAULT_FILTERABLE_ATTRIBUTES = ['marca', 'categoria_principal_name'];
+const DEFAULT_FILTERABLE_ATTRIBUTES = ['marca', 'categoria_facet'];
 
 function required(name) {
   const value = process.env[name]?.trim();

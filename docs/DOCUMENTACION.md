@@ -78,7 +78,7 @@ flowchart TB
 ### 3.1 Qué hace el sync
 
 1. Lee productos publicados desde BigQuery (`post_status = 'publish'`).
-2. Normaliza cada documento (IDs, fechas, `orden_web`, imágenes, `es_accesorio`, `es_ref_usa`).
+2. Normaliza cada documento (IDs, fechas, `orden_web`, imágenes, `es_accesorio`, `es_ref_usa`, **`categoria_facet`**).
 3. Configura el índice de Meilisearch (searchable, displayed, ranking, sort, sinónimos).
 4. Hace upsert por lotes.
 5. Opcionalmente elimina documentos que ya no existen en la fuente.
@@ -152,6 +152,7 @@ Retorna un resumen:
 | NUMERIC de BQ | String entero (`toFixed(0)`) |
 | `es_accesorio` | `1` si el título parece accesorio, `0` si no (heurística por prefijos y patrones) |
 | `es_ref_usa` | `1` si `codigo_aguila` empieza con `ref-` o `usa-`, `0` si no |
+| `categoria_facet` | Slug canónico de categoría para facet/filtro (calculado en sync) |
 
 #### Heurística de accesorios (`isAccessoryTitle`)
 
@@ -166,6 +167,17 @@ Este campo alimenta la ranking rule `es_accesorio:asc` para que accesorios quede
 Marca como baja prioridad los SKU cuyo `codigo_aguila` empieza con `ref-` o `usa-` (case insensitive).
 
 Alimenta `es_ref_usa:asc` en ranking rules. Es la **primera** regla: separa ref/usa del resto antes que relevancia, `orden_web` o accesorios.
+
+#### Taxonomía de categorías (`src/categories.js`)
+
+En cada sync:
+
+1. Arma taxonomía desde todas las filas de BigQuery (slug → name canónico).
+2. Unifica variantes del mismo slug (espacios, tildes, typos) eligiendo el name más representativo.
+3. Escribe `categoria_facet` (slug), normaliza `categoria_principal_name` y `categoria_principal_slug`.
+4. Genera `public/categories.json` (slug → label) para los chips de la web.
+
+Facet y filtro en Meilisearch usan **`categoria_facet`**, no `categoria_principal_name`.
 
 #### Extracción de imagen (`extractImageFromFields`)
 
@@ -218,7 +230,7 @@ ORDER BY orden_web ASC
 | `MEILISEARCH_INDEX` | Sí | — | Índice destino (`productos-BQ`) |
 | `MEILISEARCH_PRIMARY_KEY` | No | `ID` | Campo ID en BigQuery y Meilisearch |
 | `MEILISEARCH_SORT_FIELD` | No | `orden_web` | Campo de prioridad web |
-| `MEILISEARCH_FILTERABLE_ATTRIBUTES` | No | `marca,categoria_principal_name` | Filtros y facets (web) |
+| `MEILISEARCH_FILTERABLE_ATTRIBUTES` | No | `marca,categoria_facet` | Filtros y facets (web) |
 | `SYNC_BATCH_SIZE` | No | `1000` | Documentos por lote |
 | `SYNC_DELETE_STALE` | No | `true` | Borra docs que ya no están en BQ |
 | `SYNC_INTERVAL_MINUTES` | No | — | Intervalo del scheduler |
@@ -276,7 +288,7 @@ Override: `MEILISEARCH_DISPLAYED_ATTRIBUTES`.
 
 ### 4.5 Filterable attributes (facets y filtros)
 
-Por defecto: `marca`, `categoria_principal_name`.
+Por defecto: `marca`, `categoria_facet`.
 
 Necesarios para:
 
@@ -356,12 +368,12 @@ La marca Gadnic para filtrar está fija en código: `GADNIC_MARCA = 'Gadnic'` (n
 |---|---|---|---|
 | `q` | string | `""` | Query de búsqueda (trim) |
 | `scope` | string | `bidcom` | `bidcom` = sin filtro de marca; `gadnic` = solo `marca = "Gadnic"` |
-| `category` | string | — | Filtra por `categoria_principal_name` (click en chip) |
+| `category` | string | — | Filtra por `categoria_facet` (slug; click en chip) |
 | `limit` | number | `20` | Máximo **50** |
 | `offset` | number | `0` | Paginación |
 | `scores` | `"1"` / `true` | off | Incluye `_rankingScore` en hits |
 
-Siempre aplica `sort: ['orden_web:asc']` y pide **facets** de `categoria_principal_name` en la misma request.
+Siempre aplica `sort: ['orden_web:asc']` y pide **facets** de `categoria_facet` en la misma request. Los labels de chips salen de `public/categories.json` (generado en el sync).
 
 Respuesta de ejemplo:
 
@@ -529,7 +541,8 @@ meilisearch-sync/
 | `codigo_aguila` | SKU interno |
 | `ean` | Código de barras |
 | `marca` / `linea` | Relevancia y badges |
-| `categoria_principal_name` | Categoría + validación en tests |
+| `categoria_principal_name` | Categoría normalizada para mostrar |
+| `categoria_facet` | Slug canónico; facet, filtro y chips |
 | `orden_web` | Prioridad comercial (sort) |
 | `es_accesorio` | Ranking + badge; calculado en sync |
 | `es_ref_usa` | Ranking + badge; `1` si SKU empieza con `ref-` o `usa-` |
@@ -549,7 +562,7 @@ meilisearch-sync/
 | SKU ref-/usa- arriba del principal | `es_ref_usa:asc` debe ser la **primera** ranking rule; correr `npm run settings` |
 | Imágenes faltantes | Campo `fields` en BQ; heurística `extractImageFromFields` |
 | API 500 "marca is not filterable" | Correr `npm run settings` o `npm run sync` para aplicar filterable attributes |
-| Pestañas / categorías vacías | Mismo: `marca` y `categoria_principal_name` deben ser filterable |
+| Pestañas / categorías vacías | `marca` y `categoria_facet` filterable; correr `npm run sync` para `categories.json` |
 | API 500 "Missing env…" | Variables `MEILISEARCH_*` en `.env` o Vercel |
 | Tests fallan | Ver hints: `ranking`, `ref_usa`, `accesorio`, `catalogo` |
 
