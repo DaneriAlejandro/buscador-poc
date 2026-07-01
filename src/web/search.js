@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MeiliSearch } from 'meilisearch';
 import {
+  CATEGORY_FACET,
   buildCategoriaFacets,
   buildSearchFilter,
   loadWebConfig,
