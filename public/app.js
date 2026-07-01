@@ -117,9 +117,9 @@ function renderHit(hit, index) {
 
 let categoryOptions = [];
 
-function renderCategories(categories) {
+function renderCategories(categorias) {
   categoryListEl.innerHTML = '';
-  categoryOptions = categories ?? [];
+  categoryOptions = categorias?.buckets ?? [];
 
   if (!categoryOptions.length) {
     categoriesSection.hidden = true;
@@ -128,11 +128,11 @@ function renderCategories(categories) {
 
   categoriesSection.hidden = false;
 
-  for (const { slug, name, count } of categoryOptions) {
+  for (const { slug, key, doc_count: count } of categoryOptions) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `category-chip${selectedCategory === slug ? ' active' : ''}`;
-    button.innerHTML = `${escapeHtml(name)} <span class="category-count">${count}</span>`;
+    button.innerHTML = `${escapeHtml(key)} <span class="category-count">${count}</span>`;
     button.addEventListener('click', () => {
       selectedCategory = selectedCategory === slug ? null : slug;
       search(input.value.trim());
@@ -142,7 +142,7 @@ function renderCategories(categories) {
 }
 
 function getSelectedCategoryLabel() {
-  return categoryOptions.find((category) => category.slug === selectedCategory)?.name ?? selectedCategory;
+  return categoryOptions.find((category) => category.slug === selectedCategory)?.key ?? selectedCategory;
 }
 
 function updateMeta(shown, total, processingTimeMs) {
@@ -255,7 +255,7 @@ async function fetchPage(query, offset, { append, searchId }) {
     }
 
     if (!append) {
-      renderCategories(data.categories);
+      renderCategories(data.categorias);
     }
 
     if (data.hits.length === 0 && !append) {

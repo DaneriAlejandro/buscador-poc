@@ -386,10 +386,14 @@ Respuesta de ejemplo:
   "sort": ["orden_web:asc"],
   "processingTimeMs": 12,
   "estimatedTotalHits": 742,
-  "categories": [
-    { "name": "Cargadores Portátiles", "count": 129 },
-    { "name": "Arrancadores de Batería", "count": 32 }
-  ],
+  "categorias": {
+    "doc_count_error_upper_bound": 0,
+    "sum_other_doc_count": 0,
+    "buckets": [
+      { "key": "Cargadores Portátiles", "slug": "cargadores-portatiles", "doc_count": 129 },
+      { "key": "Arrancadores de Batería", "slug": "arrancadores-de-bateria", "doc_count": 32 }
+    ]
+  },
   "hits": []
 }
 ```
@@ -459,7 +463,7 @@ Después del primer deploy, si las pestañas o categorías fallan por filterable
 
 1. Búsqueda con **debounce** (300 ms); mínimo 2 caracteres.
 2. Llama a `GET /api/search?q=...&scope=bidcom|gadnic&limit=20` (y `category=...` si hay chip activo).
-3. Renderiza chips de categorías desde `categories` (facets de Meilisearch).
+3. Renderiza chips de categorías desde `categorias.buckets`.
 4. Click en categoría → filtra productos; segundo click → quita filtro.
 5. Renderiza imagen, título, badges (marca, categoría, `orden_web`, accesorio, score), precio en ARS, SKU/EAN/ID.
 6. Escapa HTML (`escapeHtml`).

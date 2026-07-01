@@ -3,10 +3,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MeiliSearch } from 'meilisearch';
 import {
-  CATEGORY_FACET,
+  buildCategoriaFacets,
   buildSearchFilter,
   loadWebConfig,
-  parseFacetCategories,
 } from './config.js';
 
 const categoryLabelsPath = join(dirname(fileURLToPath(import.meta.url)), '../../public/categories.json');
@@ -68,6 +67,8 @@ export async function searchProducts(params) {
     loadCategoryLabels(),
   ]);
 
+  const categorias = buildCategoriaFacets(response.facetDistribution, categoryLabels);
+
   return {
     query: q,
     scope,
@@ -78,7 +79,7 @@ export async function searchProducts(params) {
     sort,
     processingTimeMs: response.processingTimeMs,
     estimatedTotalHits: response.estimatedTotalHits ?? response.hits.length,
-    categories: parseFacetCategories(response.facetDistribution, categoryLabels),
+    categorias,
     hits: response.hits,
   };
 }

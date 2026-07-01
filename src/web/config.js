@@ -62,18 +62,38 @@ export function buildSearchFilter({ scope, category }) {
   return parts.join(' AND ');
 }
 
-export function parseFacetCategories(facetDistribution, labels = {}, limit = 12) {
+export function buildCategoriaFacets(facetDistribution, labels = {}, limit = 12) {
   const buckets = facetDistribution?.[CATEGORY_FACET];
   if (!buckets) {
-    return [];
+    return {
+      doc_count_error_upper_bound: 0,
+      sum_other_doc_count: 0,
+      buckets: [],
+    };
   }
 
-  return Object.entries(buckets)
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, limit)
-    .map(([slug, count]) => ({
+  const entries = Object.entries(buckets).sort((left, right) => right[1] - left[1]);
+  const visible = entries.slice(0, limit);
+  const hidden = entries.slice(limit);
+
+  return {
+    doc_count_error_upper_bound: 0,
+    sum_other_doc_count: hidden.reduce((total, [, count]) => total + count, 0),
+    buckets: visible.map(([slug, doc_count]) => ({
+      key: labels[slug] ?? slug,
       slug,
-      name: labels[slug] ?? slug,
-      count,
-    }));
+      doc_count,
+    })),
+  };
+}
+
+/** @deprecated Use buildCategoriaFacets — flat list for legacy callers */
+export function parseFacetCategories(facetDistribution, labels = {}, limit = 12) {
+  return buildCategoriaFacets(facetDistribution, labels, limit).buckets.map(
+    ({ key, slug, doc_count }) => ({
+      slug,
+      name: key,
+      count: doc_count,
+    }),
+  );
 }
